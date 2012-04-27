@@ -25,7 +25,7 @@
 
 /*--------------------------------------------------------------------------------*/
 
-//#define PRINT
+#define PRINT
 #define BLOCK_SIZE 16
 #define DEFAULT_MATRIX_SIZE (16*100)
 #define DEFAULT_KERNEL_FILENAME ("kernel.cl")
@@ -184,13 +184,55 @@ cl_float *randomMatrix(int size) {
   return output;
 }
 
+cl_uint *initPreds(int size) {
+  cl_uint *output = (cl_uint *)malloc(sizeof(cl_uint)*size*size);
+  int i;
+  for(i = 0; i < size*size; i++) {
+    output[i] = i/size + 1;
+  }
+  return output;
+}
+
 void printMatrix(cl_float *matrix, cl_int rows, cl_int cols) {
   int i;
+  printf("%4.0f ", (float)-1); 
+  for(i = 0; i < cols; i++)
+    printf("%4.0d ",i+1); 
+  printf("\n");
+  for(i=0; i<cols; i++)
+    printf("_____");
+  printf("____");
+    
+  
   for(i = 0; i < rows*cols; i++) {
-    printf("%4.0f ", matrix[i]);
-    if((i + 1) % cols == 0) 
+    if(i % cols == 0) {
       printf("\n");
+      printf("%4d|", (i/cols + 1));
+    }
+    if(matrix[i] > 4000000)
+      matrix[i] = INFINITY;
+    printf("%4.0f ", matrix[i]);
   }
+  printf("\n");
+}
+
+void printPreds(cl_uint *matrix, cl_int size) {
+  int i;
+  printf("%4.0f ", (float)-1); 
+  for(i = 0; i < size; i++)
+    printf("%4.0d ", i+1); 
+  printf("\n");
+  for(i=0; i<size; i++)
+    printf("_____");
+  printf("____");
+  for(i = 0; i < size*size; i++) {
+    if(i % size == 0) {
+      printf("\n");
+      printf("%4d|", (i/size + 1));
+    }
+    printf("%4d ", matrix[i]);
+  }
+  printf("\n");
 }
 
 void multiplyMatrix(cl_float *left, cl_float *right, cl_int l_col_length, cl_int size, cl_int r_row_length, cl_float **result) {
@@ -276,31 +318,39 @@ int main(int argc, char **argv) {
   //Read matrices from file
   cl_int m_size;
   cl_float *matrix;
+  cl_uint *preds_init;
   cl_mem input;
-  cl_mem other_matrix;
+  cl_mem input2;
+  cl_mem preds;
   
   if (argc < 2) {
     matrix = randomMatrix(DEFAULT_MATRIX_SIZE);
+    preds_init = initPreds(DEFAULT_MATRIX_SIZE);
     m_size = DEFAULT_MATRIX_SIZE;
   } else {
     matrix = randomMatrix(atoi(argv[1]));
+    preds_init = initPreds(atoi(argv[1]));
     m_size = atoi(argv[1]);
   }
   
 #ifdef PRINT
-  printMatrix(matrix, DEFAULT_MATRIX_SIZE, DEFAULT_MATRIX_SIZE);
+  if(m_size < 100) {
+    printMatrix(matrix, m_size, m_size);
+    printf(BAR);
+    printPreds(preds_init, m_size);
+  }
 #endif
   
   printf("Creating data buffers.\n");
   printf(BAR);
   //Create data buffers on the device.
-  input = clCreateBuffer(context, CL_MEM_READ_ONLY,  sizeof(cl_float)*m_size*m_size, NULL, NULL);
+  input = clCreateBuffer(context, CL_MEM_READ_WRITE,  sizeof(cl_float)*m_size*m_size, NULL, NULL);
 
-  other_matrix = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(cl_float)*m_size*m_size, NULL, NULL);
+  input2 = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(cl_float)*m_size*m_size, NULL, NULL);
   
+  preds = clCreateBuffer(context, CL_MEM_READ_WRITE,  sizeof(cl_uint)*m_size*m_size, NULL, NULL);
   
-  
-  if(!input || !other_matrix ) {
+  if(!input || !input2 || !preds ) {
     problem("Failed to allocate device memory.\n");
     exit(-1);
   }
@@ -311,6 +361,8 @@ int main(int argc, char **argv) {
   //Put data into device Memory.
   err  =  clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, 
   		       sizeof(cl_float)*m_size*m_size, matrix, 0, NULL, NULL);
+  err  =  clEnqueueWriteBuffer(commands, preds, CL_TRUE, 0, 
+  		       sizeof(cl_uint)*m_size*m_size, preds_init, 0, NULL, NULL);
   check_failure(err);
   
   printf("Setting Kernel Arguments.\n");
@@ -318,7 +370,8 @@ int main(int argc, char **argv) {
   //Set arguments.
   int i = 0;
   err  =  clSetKernelArg(kernel, i++, sizeof(cl_mem), &input);
-  err |=  clSetKernelArg(kernel, i++, sizeof(cl_mem), &other_matrix);
+  err |=  clSetKernelArg(kernel, i++, sizeof(cl_mem), &input2);
+  err |=  clSetKernelArg(kernel, i++, sizeof(cl_mem), &preds);
   err |=  clSetKernelArg(kernel, i++, sizeof(cl_int), &m_size);
   check_failure(err);
 
@@ -339,7 +392,7 @@ int main(int argc, char **argv) {
     clFinish(commands);
     exp = exp*2;
     i = 0;
-    clSetKernelArg(kernel, i++, sizeof(cl_mem), &other_matrix);
+    clSetKernelArg(kernel, i++, sizeof(cl_mem), &input2);
     clSetKernelArg(kernel, i, sizeof(cl_mem), &input);
     clFinish(commands);
     err = clEnqueueNDRangeKernel(commands, kernel, 2, NULL, global_size, local_size, 0, NULL, NULL);
@@ -347,8 +400,9 @@ int main(int argc, char **argv) {
     exp = exp*2;
     i = 0;
     clSetKernelArg(kernel, i++, sizeof(cl_mem), &input);
-    clSetKernelArg(kernel, i, sizeof(cl_mem), &other_matrix);
-    printf("a");
+    clSetKernelArg(kernel, i, sizeof(cl_mem), &input2);
+    printf("%d\n", exp);
+    clFinish(commands);
   }
   gettimeofday(&end, NULL);
   delta = tv_delta(start, end);
@@ -361,9 +415,13 @@ int main(int argc, char **argv) {
   printf(BAR);
   //Retrieve and print output.
   cl_float *result;
+  cl_uint *preds_result;
   result = (cl_float *)malloc(sizeof(cl_float)*m_size*m_size);
-  err = clEnqueueReadBuffer(commands, other_matrix, CL_TRUE, 0, sizeof(cl_float)*m_size*m_size,
+  preds_result = (cl_uint *)malloc(sizeof(cl_int)*m_size*m_size);
+  err = clEnqueueReadBuffer(commands, input2, CL_TRUE, 0, sizeof(cl_float)*m_size*m_size,
 			    result, 0, NULL, NULL );
+  err = clEnqueueReadBuffer(commands, preds, CL_TRUE, 0, sizeof(cl_uint)*m_size*m_size,
+			    preds_result, 0, NULL, NULL );
   check_failure(err);
   
   /*
@@ -387,7 +445,11 @@ int main(int argc, char **argv) {
 	  (long int)delta.tv_sec, 
 	  (long int)delta.tv_usec);
 #ifdef PRINT
-  printMatrix(result, m_size, m_size);
+  if(m_size < 100) {
+    printMatrix(result, m_size, m_size);
+    printf(BAR);
+    printPreds(preds_result, m_size);
+  }
 #endif
 
 
@@ -403,7 +465,7 @@ int main(int argc, char **argv) {
   clReleaseCommandQueue(commands);
   clReleaseContext(context);
   clReleaseMemObject(input);
-  clReleaseMemObject(other_matrix);
+  clReleaseMemObject(input2);
 
   //Memory Cleanup.
   free(result);
