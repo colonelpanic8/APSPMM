@@ -434,16 +434,12 @@ int main(int argc, char **argv) {
 
   //Do the computation on the CPU to verify.
   
-  cl_float *comp_result;
   printf("Running computation on the CPU.\n");
   printf(BAR);
   gettimeofday(&start, NULL);
   //multiplyMatrix(matrix, right_matrix, m_size, m_size, m_size, &comp_result);
   gettimeofday(&end, NULL);
   delta = tv_delta(start, end);
-  printf("CPU time: %ld.%06ld\n", 
-	  (long int)delta.tv_sec, 
-	  (long int)delta.tv_usec);
 #ifdef PRINT
   if(m_size < 100) {
     printMatrix(result, m_size, m_size);
@@ -454,9 +450,6 @@ int main(int argc, char **argv) {
 
 
   printf(BAR);
-  if(areEqual(result, comp_result, m_size*m_size))
-    printf("Equal!\n");
-  else printf("Not Equal!\n");
   printf(BAR);
   printf("Cleanup.\n");
   //Device Cleanup.
