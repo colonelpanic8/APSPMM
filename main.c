@@ -27,7 +27,7 @@
 
 #define PRINT
 #define BLOCK_SIZE 16
-#define DEFAULT_MATRIX_SIZE (16*100)
+#define DEFAULT_MATRIX_SIZE (16*1)
 #define DEFAULT_KERNEL_FILENAME ("kernel.cl")
 #define problem(...) fprintf(stderr, __VA_ARGS__)
 #define BAR "--------------------------------------------------------------------------------\n"
