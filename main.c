@@ -318,18 +318,14 @@ int main(int argc, char **argv) {
   //Read matrices from file
   cl_int m_size;
   cl_float *matrix;
-  cl_uint *preds_init;
   cl_mem input;
   cl_mem input2;
-  cl_mem preds;
   
   if (argc < 2) {
     matrix = randomMatrix(DEFAULT_MATRIX_SIZE);
-    preds_init = initPreds(DEFAULT_MATRIX_SIZE);
     m_size = DEFAULT_MATRIX_SIZE;
   } else {
     matrix = randomMatrix(atoi(argv[1]));
-    preds_init = initPreds(atoi(argv[1]));
     m_size = atoi(argv[1]);
   }
   
@@ -337,7 +333,6 @@ int main(int argc, char **argv) {
   if(m_size < 100) {
     printMatrix(matrix, m_size, m_size);
     printf(BAR);
-    printPreds(preds_init, m_size);
   }
 #endif
   
@@ -348,9 +343,8 @@ int main(int argc, char **argv) {
 
   input2 = clCreateBuffer(context,  CL_MEM_READ_WRITE,  sizeof(cl_float)*m_size*m_size, NULL, NULL);
   
-  preds = clCreateBuffer(context, CL_MEM_READ_WRITE,  sizeof(cl_uint)*m_size*m_size, NULL, NULL);
   
-  if(!input || !input2 || !preds ) {
+  if(!input || !input2 ) {
     problem("Failed to allocate device memory.\n");
     exit(-1);
   }
@@ -361,8 +355,6 @@ int main(int argc, char **argv) {
   //Put data into device Memory.
   err  =  clEnqueueWriteBuffer(commands, input, CL_TRUE, 0, 
   		       sizeof(cl_float)*m_size*m_size, matrix, 0, NULL, NULL);
-  err  =  clEnqueueWriteBuffer(commands, preds, CL_TRUE, 0, 
-  		       sizeof(cl_uint)*m_size*m_size, preds_init, 0, NULL, NULL);
   check_failure(err);
   
   printf("Setting Kernel Arguments.\n");
@@ -371,7 +363,6 @@ int main(int argc, char **argv) {
   int i = 0;
   err  =  clSetKernelArg(kernel, i++, sizeof(cl_mem), &input);
   err |=  clSetKernelArg(kernel, i++, sizeof(cl_mem), &input2);
-  err |=  clSetKernelArg(kernel, i++, sizeof(cl_mem), &preds);
   err |=  clSetKernelArg(kernel, i++, sizeof(cl_int), &m_size);
   check_failure(err);
 
@@ -415,13 +406,9 @@ int main(int argc, char **argv) {
   printf(BAR);
   //Retrieve and print output.
   cl_float *result;
-  cl_uint *preds_result;
   result = (cl_float *)malloc(sizeof(cl_float)*m_size*m_size);
-  preds_result = (cl_uint *)malloc(sizeof(cl_int)*m_size*m_size);
   err = clEnqueueReadBuffer(commands, input2, CL_TRUE, 0, sizeof(cl_float)*m_size*m_size,
 			    result, 0, NULL, NULL );
-  err = clEnqueueReadBuffer(commands, preds, CL_TRUE, 0, sizeof(cl_uint)*m_size*m_size,
-			    preds_result, 0, NULL, NULL );
   check_failure(err);
   
   /*
@@ -434,11 +421,9 @@ int main(int argc, char **argv) {
 
   //Do the computation on the CPU to verify.
   
-  cl_float *comp_result;
-  printf("Running computation on the CPU.\n");
+ 
   printf(BAR);
   gettimeofday(&start, NULL);
-  //multiplyMatrix(matrix, right_matrix, m_size, m_size, m_size, &comp_result);
   gettimeofday(&end, NULL);
   delta = tv_delta(start, end);
   printf("CPU time: %ld.%06ld\n", 
@@ -448,15 +433,10 @@ int main(int argc, char **argv) {
   if(m_size < 100) {
     printMatrix(result, m_size, m_size);
     printf(BAR);
-    printPreds(preds_result, m_size);
   }
 #endif
 
 
-  printf(BAR);
-  if(areEqual(result, comp_result, m_size*m_size))
-    printf("Equal!\n");
-  else printf("Not Equal!\n");
   printf(BAR);
   printf("Cleanup.\n");
   //Device Cleanup.
